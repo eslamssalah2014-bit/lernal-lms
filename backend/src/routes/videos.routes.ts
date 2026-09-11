@@ -1,124 +1,160 @@
 // ============================================================================
-// VIDEO STREAMING ACCESS GUARD & BUNNY STREAM SIGNER
-// Enforces enrollment authorization before issuing signed video streaming tokens
+// VIDEO STREAMING ACCESS GUARD & BUNNY STREAM SIGNER - SUPABASE INTEGRATED
+// Authorizes viewing rights against Supabase enrollments & signs Bunny CDN tokens
 // ============================================================================
 
 import { Router, Response } from 'express';
-import { db } from '../data/mockDatabase.js';
+import { supabaseAdmin } from '../services/supabase.js';
 import { bunnyStream } from '../services/bunnyStream.js';
 import { optionalAuth, AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = Router();
 
-// GET /api/videos/lessons/:lessonId/access
-router.get('/lessons/:lessonId/access', optionalAuth, (req: AuthenticatedRequest, res: Response) => {
+// GET /api/videos/lessons/:lessonId/access - Authorizes stream & returns signed Bunny CDN tokens
+router.get('/lessons/:lessonId/access', optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
   const { lessonId } = req.params;
 
-  // Search across modules for the lesson
-  let foundLesson: any = null;
-  let parentCourse: any = null;
+  try {
+    // 1. Fetch lesson and parent course
+    const { data: lesson, error: lesErr } = await supabaseAdmin
+      .from('lessons')
+      .select(`
+        *,
+        course:courses(id, title, price),
+        videos:videos(bunny_video_id, title, duration_seconds, thumbnail_url, playback_metadata),
+        resources:lesson_resources(*)
+      `)
+      .eq('id', lessonId)
+      .maybeSingle();
 
-  for (const mod of db.modules) {
-    const l = mod.lessons.find((item) => item.id === lessonId);
-    if (l) {
-      foundLesson = l;
-      parentCourse = db.courses.find((c) => c.id === l.course_id);
-      break;
+    if (lesErr || !lesson) {
+      return res.status(404).json({ error: 'Lesson not found' });
     }
-  }
 
-  if (!foundLesson) {
-    return res.status(404).json({ error: 'Lesson not found' });
-  }
+    // 2. Check authorization
+    let isAuthorized = false;
+    let authReason = '';
 
-  // Check access authorization
-  let isAuthorized = false;
-  let authReason = '';
+    if (lesson.is_free_preview) {
+      isAuthorized = true;
+      authReason = 'Free preview lesson available to all learners';
+    } else if (!req.user) {
+      return res.status(401).json({
+        error: 'Please log in to stream this lesson.',
+        requires_login: true,
+        lesson_title: lesson.title,
+      });
+    } else if (req.user.role === 'admin' || req.user.role === 'instructor') {
+      isAuthorized = true;
+      authReason = `Staff access (${req.user.role})`;
+    } else if (req.user.role === 'student') {
+      const { data: stu } = await supabaseAdmin
+        .from('students')
+        .select('id')
+        .eq('profile_id', req.user.id)
+        .maybeSingle();
 
-  if (foundLesson.is_free_preview) {
-    isAuthorized = true;
-    authReason = 'Free preview lesson available to all learners';
-  } else if (!req.user) {
-    return res.status(401).json({
-      error: 'Please log in to stream this lesson.',
-      requires_login: true,
-      lesson_title: foundLesson.title,
-    });
-  } else if (req.user.role === 'admin' || req.user.role === 'instructor') {
-    isAuthorized = true;
-    authReason = `Staff access (${req.user.role})`;
-  } else if (req.user.role === 'student') {
-    const student = db.students.find((s) => s.profile_id === req.user!.id);
-    if (student) {
-      const enrollment = db.enrollments.find(
-        (e) => e.student_id === student.id && e.course_id === foundLesson.course_id && e.status === 'active'
-      );
-      if (enrollment) {
-        isAuthorized = true;
-        authReason = 'Active student course enrollment';
+      if (stu) {
+        const { data: enrollment } = await supabaseAdmin
+          .from('enrollments')
+          .select('id')
+          .eq('student_id', stu.id)
+          .eq('course_id', lesson.course_id)
+          .eq('status', 'active')
+          .maybeSingle();
+
+        if (enrollment) {
+          isAuthorized = true;
+          authReason = 'Active student course enrollment';
+        }
+      }
+    } else if (req.user.role === 'parent') {
+      const { data: par } = await supabaseAdmin
+        .from('parents')
+        .select('id, students:students(id)')
+        .eq('profile_id', req.user.id)
+        .maybeSingle();
+
+      if (par && par.students && par.students.length > 0) {
+        const studentIds = par.students.map((s: any) => s.id);
+        const { data: enrollment } = await supabaseAdmin
+          .from('enrollments')
+          .select('id')
+          .in('student_id', studentIds)
+          .eq('course_id', lesson.course_id)
+          .eq('status', 'active')
+          .limit(1)
+          .maybeSingle();
+
+        if (enrollment) {
+          isAuthorized = true;
+          authReason = 'Child enrolled under parent account';
+        }
       }
     }
-  } else if (req.user.role === 'parent') {
-    const parent = db.parents.find((p) => p.profile_id === req.user!.id);
-    if (parent) {
-      const studentChildren = db.students.filter((s) => s.parent_id === parent.id);
-      const studentIds = studentChildren.map((s) => s.id);
-      const enrollment = db.enrollments.find(
-        (e) => studentIds.includes(e.student_id) && e.course_id === foundLesson.course_id && e.status === 'active'
-      );
-      if (enrollment) {
-        isAuthorized = true;
-        authReason = 'Child enrolled under parent account';
+
+    if (!isAuthorized) {
+      return res.status(403).json({
+        error: 'Enrollment required to view full lesson video stream.',
+        course_id: lesson.course_id,
+        course_title: lesson.course?.title || 'Course',
+        course_price: lesson.course?.price || 0,
+        lesson_title: lesson.title,
+      });
+    }
+
+    // 3. Retrieve Bunny video identifier from metadata (strictly NO raw media files in Supabase)
+    const videoRecord = lesson.videos?.[0] || lesson.videos;
+    const bunnyVideoId = videoRecord?.bunny_video_id || `bunny_vid_lernal_${lesson.id.slice(0, 8)}`;
+
+    const playbackInfo = bunnyStream.getAuthorizedVideoPlayback(bunnyVideoId);
+
+    // 4. Retrieve existing watch progress if user is a student
+    let currentProgress = 0;
+    let isCompleted = false;
+
+    if (req.user && req.user.role === 'student') {
+      const { data: stu } = await supabaseAdmin
+        .from('students')
+        .select('id')
+        .eq('profile_id', req.user.id)
+        .maybeSingle();
+
+      if (stu) {
+        const { data: prog } = await supabaseAdmin
+          .from('student_progress')
+          .select('watch_time_seconds, is_completed')
+          .eq('student_id', stu.id)
+          .eq('lesson_id', lesson.id)
+          .maybeSingle();
+
+        if (prog) {
+          currentProgress = prog.watch_time_seconds || 0;
+          isCompleted = Boolean(prog.is_completed);
+        }
       }
     }
-  }
 
-  if (!isAuthorized) {
-    return res.status(403).json({
-      error: 'Enrollment required to view full lesson video stream.',
-      course_id: foundLesson.course_id,
-      course_title: parentCourse ? parentCourse.title : 'Course',
-      course_price: parentCourse ? parentCourse.price : 0,
-      lesson_title: foundLesson.title,
-    });
-  }
-
-  // Authorize and sign Bunny Stream payload
-  const bunnyVideoId = foundLesson.bunny_video_id || 'bunny_vid_lernal_101';
-  const playbackInfo = bunnyStream.getAuthorizedVideoPlayback(bunnyVideoId, foundLesson.video_url);
-
-  // Retrieve existing watch progress if user is a student
-  let currentProgress = 0;
-  let isCompleted = false;
-  if (req.user && req.user.role === 'student') {
-    const student = db.students.find((s) => s.profile_id === req.user!.id);
-    if (student) {
-      const progressRecord = db.studentProgress.find(
-        (p) => p.student_id === student.id && p.lesson_id === foundLesson.id
-      );
-      if (progressRecord) {
-        currentProgress = progressRecord.watch_time_seconds;
-        isCompleted = progressRecord.is_completed;
-      }
-    }
-  }
-
-  res.json({
-    success: true,
-    auth_reason: authReason,
-    lesson: {
-      id: foundLesson.id,
-      title: foundLesson.title,
-      description: foundLesson.description,
-      duration_minutes: foundLesson.duration_minutes,
-      resources: foundLesson.resources || [],
-      progress: {
-        watch_time_seconds: currentProgress,
-        is_completed: isCompleted,
+    res.json({
+      success: true,
+      auth_reason: authReason,
+      lesson: {
+        id: lesson.id,
+        title: lesson.title,
+        description: lesson.description,
+        duration_minutes: lesson.duration_minutes,
+        resources: lesson.resources || [],
+        progress: {
+          watch_time_seconds: currentProgress,
+          is_completed: isCompleted,
+        },
       },
-    },
-    playback: playbackInfo,
-  });
+      playback: playbackInfo,
+    });
+  } catch (err: any) {
+    console.error('Error authorizing video access in Supabase:', err);
+    res.status(500).json({ error: err.message || 'Failed to authorize video access' });
+  }
 });
 
 export default router;

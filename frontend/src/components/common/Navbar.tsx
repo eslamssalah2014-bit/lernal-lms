@@ -18,13 +18,15 @@ import {
   HelpCircle,
   Compass,
   Video,
+  LogIn,
 } from 'lucide-react';
 import { LernalLogo } from './LernalLogo';
 import { useAuth } from '../../context/AuthContext';
 import { LeadCaptureModal } from './LeadCaptureModal';
+import { AuthModal } from './AuthModal';
 
 export const Navbar: React.FC = () => {
-  const { user, role, loginDemo, logout } = useAuth();
+  const { user, role, loginDemo, logout, openAuthModal } = useAuth();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
@@ -120,31 +122,67 @@ export const Navbar: React.FC = () => {
           </nav>
 
           {/* Right Action Bar */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {/* Ask an Advisor Button */}
             <button
               onClick={() => setIsLeadModalOpen(true)}
-              className="hidden sm:flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-[#36C7F4] hover:text-white bg-[#002B3B] hover:bg-[#003B4F] border border-[#004D6A] rounded-xl transition-all"
+              className="hidden lg:flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-[#36C7F4] hover:text-white bg-[#002B3B] hover:bg-[#003B4F] border border-[#004D6A] rounded-xl transition-all"
             >
               <HelpCircle className="w-3.5 h-3.5" />
               <span>Ask Advisor</span>
             </button>
 
+            {/* If Guest: Sign In & Register buttons */}
+            {!user ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => openAuthModal('login')}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-gray-200 hover:text-white bg-[#002B3B] hover:bg-[#003B4F] border border-[#004D6A] rounded-xl transition-all"
+                >
+                  <LogIn className="w-3.5 h-3.5 text-[#36C7F4]" />
+                  <span>Sign In</span>
+                </button>
+                <button
+                  onClick={() => openAuthModal('register')}
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-[#00212D] bg-gradient-to-r from-[#00A9D6] to-[#36C7F4] hover:brightness-110 rounded-xl shadow-cyan-glow transition-all"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Get Started</span>
+                </button>
+              </div>
+            ) : (
+              <div className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 bg-[#002838] border border-[#004D6A] rounded-xl">
+                <img
+                  src={user.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.email}`}
+                  alt={user.full_name}
+                  className="w-6 h-6 rounded-full border border-[#36C7F4]/40"
+                />
+                <div className="text-left">
+                  <div className="text-[11px] font-bold text-white leading-tight max-w-[90px] truncate">
+                    {user.full_name.split(' ')[0]}
+                  </div>
+                  <div className="text-[9px] uppercase tracking-wider text-[#36C7F4] font-bold">
+                    {user.role}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Quick Role Switcher Pill */}
             <div className="relative">
               <button
                 onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
-                className="flex items-center gap-2 px-3 py-2 bg-[#002D3D] hover:bg-[#003B4F] border border-[#004D6A] rounded-2xl text-xs font-semibold text-gray-200 transition-all"
+                className="flex items-center gap-2 px-2.5 py-2 bg-[#002D3D] hover:bg-[#003B4F] border border-[#004D6A] rounded-2xl text-xs font-semibold text-gray-200 transition-all"
                 title="Switch demo persona for testing"
               >
                 <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-[#00A9D6] to-[#8DDFFF] text-[#00212D] flex items-center justify-center font-bold text-xs">
                   {role === 'admin' ? 'A' : role === 'student' ? 'S' : role === 'parent' ? 'P' : 'G'}
                 </div>
-                <div className="text-left hidden lg:block">
-                  <div className="text-[10px] uppercase tracking-wider text-[#36C7F4] font-bold">
+                <div className="text-left hidden xl:block">
+                  <div className="text-[9px] uppercase tracking-wider text-[#36C7F4] font-bold">
                     Demo Role
                   </div>
-                  <div className="leading-tight capitalize">{user ? user.full_name.split(' ')[0] : 'Guest'}</div>
+                  <div className="leading-tight capitalize text-[11px]">{user ? user.full_name.split(' ')[0] : 'Guest'}</div>
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
               </button>
@@ -309,6 +347,9 @@ export const Navbar: React.FC = () => {
         isOpen={isLeadModalOpen}
         onClose={() => setIsLeadModalOpen(false)}
       />
+
+      {/* Supabase Auth Modal */}
+      <AuthModal />
     </>
   );
 };

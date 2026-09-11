@@ -70,6 +70,13 @@ class ApiClient {
     });
   }
 
+  public async forgotPassword(email: string) {
+    return this.request<any>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  }
+
   public async getMe() {
     return this.request<any>('/auth/me');
   }

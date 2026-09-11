@@ -9,12 +9,14 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { Navbar } from './components/common/Navbar';
 import { Footer } from './components/common/Footer';
+import { ProtectedRoute } from './components/common/ProtectedRoute';
 
 // Code-split dynamic page imports for optimal bundle size & fast FCP on Vercel
 const HomePage = lazy(() => import('./pages/public/HomePage').then(m => ({ default: m.HomePage })));
 const CourseCatalogPage = lazy(() => import('./pages/public/CourseCatalogPage').then(m => ({ default: m.CourseCatalogPage })));
 const CourseDetailsPage = lazy(() => import('./pages/public/CourseDetailsPage').then(m => ({ default: m.CourseDetailsPage })));
 const RecordedCoursesPage = lazy(() => import('./pages/public/RecordedCoursesPage').then(m => ({ default: m.RecordedCoursesPage })));
+const ResetPasswordPage = lazy(() => import('./pages/public/ResetPasswordPage').then(m => ({ default: m.ResetPasswordPage })));
 
 const StudentDashboardPage = lazy(() => import('./pages/student/StudentDashboardPage').then(m => ({ default: m.StudentDashboardPage })));
 const CoursePlayerPage = lazy(() => import('./pages/student/CoursePlayerPage').then(m => ({ default: m.CoursePlayerPage })));
@@ -90,13 +92,23 @@ export const App: React.FC = () => {
                 </PublicLayout>
               }
             />
+            <Route
+              path="/reset-password"
+              element={
+                <PublicLayout>
+                  <ResetPasswordPage />
+                </PublicLayout>
+              }
+            />
 
-            {/* Student Hub */}
+            {/* Student Hub (Protected: student, admin) */}
             <Route
               path="/student/dashboard"
               element={
                 <PublicLayout>
-                  <StudentDashboardPage />
+                  <ProtectedRoute allowedRoles={['student', 'admin']}>
+                    <StudentDashboardPage />
+                  </ProtectedRoute>
                 </PublicLayout>
               }
             />
@@ -104,7 +116,9 @@ export const App: React.FC = () => {
               path="/student/courses/:courseId/play"
               element={
                 <PublicLayout>
-                  <CoursePlayerPage />
+                  <ProtectedRoute allowedRoles={['student', 'admin', 'instructor']}>
+                    <CoursePlayerPage />
+                  </ProtectedRoute>
                 </PublicLayout>
               }
             />
@@ -112,23 +126,34 @@ export const App: React.FC = () => {
               path="/student/tests/:testId"
               element={
                 <PublicLayout>
-                  <QuizTakePage />
+                  <ProtectedRoute allowedRoles={['student', 'admin']}>
+                    <QuizTakePage />
+                  </ProtectedRoute>
                 </PublicLayout>
               }
             />
 
-            {/* Parent Portal */}
+            {/* Parent Portal (Protected: parent, admin) */}
             <Route
               path="/parent/dashboard"
               element={
                 <PublicLayout>
-                  <ParentDashboardPage />
+                  <ProtectedRoute allowedRoles={['parent', 'admin']}>
+                    <ParentDashboardPage />
+                  </ProtectedRoute>
                 </PublicLayout>
               }
             />
 
-            {/* Admin Command Center (Dedicated Layout) */}
-            <Route path="/admin" element={<AdminLayout />}>
+            {/* Admin Command Center (Dedicated Layout, Protected: admin only) */}
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminLayout />
+                </ProtectedRoute>
+              }
+            >
               <Route index element={<AdminDashboardPage />} />
               <Route path="leads" element={<AdminLeadsCenterPage />} />
               <Route path="finance" element={<AdminFinancePage />} />

@@ -1,10 +1,9 @@
 -- ============================================================================
--- LERNAL LMS - MASTER PRODUCTION DATABASE SCHEMA (Supabase PostgreSQL)
--- Tagline: SINCE 2026
--- Reproducible schema with all 20+ tables, constraints, RLS policies & auth triggers
+-- LERNAL LMS - MIGRATION 001: INITIAL SCHEMA
+-- Production PostgreSQL Database for Supabase
 -- ============================================================================
 
--- Enable required extensions
+-- Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
@@ -35,7 +34,7 @@ INSERT INTO roles (id, name, description) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- ----------------------------------------------------------------------------
--- 2. PROFILES (Base user table matching or extending Supabase auth.users)
+-- 2. PROFILES (Extends Supabase auth.users)
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS profiles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -257,7 +256,7 @@ BEFORE UPDATE ON enrollments
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ----------------------------------------------------------------------------
--- 13. STUDENT PROGRESS (Lesson-by-lesson tracking)
+-- 13. STUDENT PROGRESS (Lesson-level tracking)
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS student_progress (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -278,7 +277,7 @@ BEFORE UPDATE ON student_progress
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ----------------------------------------------------------------------------
--- 14. LEADS (Lightweight CRM Engine)
+-- 14. LEADS (CRM Engine)
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS leads (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -409,7 +408,7 @@ CREATE TABLE IF NOT EXISTS test_attempts (
 );
 
 -- ----------------------------------------------------------------------------
--- 21. TEST RESULTS
+-- 21. TEST RESULTS (Per question audit for attempt)
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS test_results (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -481,202 +480,3 @@ CREATE INDEX IF NOT EXISTS idx_test_attempts_student ON test_attempts(student_id
 CREATE INDEX IF NOT EXISTS idx_test_attempts_test ON test_attempts(test_id);
 CREATE INDEX IF NOT EXISTS idx_test_results_attempt ON test_results(attempt_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
-
--- ============================================================================
--- ROW LEVEL SECURITY (RLS)
--- ============================================================================
-CREATE OR REPLACE FUNCTION public.get_current_profile_id()
-RETURNS UUID AS $$
-    SELECT id FROM public.profiles WHERE auth_user_id = auth.uid() LIMIT 1;
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
-
-CREATE OR REPLACE FUNCTION public.is_admin()
-RETURNS BOOLEAN AS $$
-    SELECT EXISTS (
-        SELECT 1 FROM public.profiles
-        WHERE auth_user_id = auth.uid() AND role = 'admin'
-    );
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
-
-ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE parents ENABLE ROW LEVEL SECURITY;
-ALTER TABLE students ENABLE ROW LEVEL SECURITY;
-ALTER TABLE instructors ENABLE ROW LEVEL SECURITY;
-ALTER TABLE course_categories ENABLE ROW LEVEL SECURITY;
-ALTER TABLE courses ENABLE ROW LEVEL SECURITY;
-ALTER TABLE course_modules ENABLE ROW LEVEL SECURITY;
-ALTER TABLE lessons ENABLE ROW LEVEL SECURITY;
-ALTER TABLE videos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE lesson_resources ENABLE ROW LEVEL SECURITY;
-ALTER TABLE enrollments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE student_progress ENABLE ROW LEVEL SECURITY;
-ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
-ALTER TABLE lead_notes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE tests ENABLE ROW LEVEL SECURITY;
-ALTER TABLE test_questions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE test_answers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE test_attempts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE test_results ENABLE ROW LEVEL SECURITY;
-ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
-ALTER TABLE achievements ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Roles are viewable by everyone" ON roles FOR SELECT USING (true);
-CREATE POLICY "Roles manageable by admin only" ON roles FOR ALL USING (public.is_admin());
-
-CREATE POLICY "Profiles viewable by self, enrolled instructors, or admin" ON profiles
-    FOR SELECT USING (
-        auth.uid() = auth_user_id
-        OR public.is_admin()
-        OR EXISTS (
-            SELECT 1 FROM parents p
-            JOIN students s ON s.parent_id = p.id
-            WHERE p.profile_id = public.get_current_profile_id() AND s.profile_id = profiles.id
-        )
-        OR EXISTS (
-            SELECT 1 FROM instructors ins
-            JOIN courses c ON c.instructor_id = ins.id
-            JOIN enrollments e ON e.course_id = c.id
-            JOIN students s ON s.id = e.student_id
-            WHERE ins.profile_id = public.get_current_profile_id() AND s.profile_id = profiles.id
-        )
-    );
-
-CREATE POLICY "Users can update own profile" ON profiles
-    FOR UPDATE USING (auth.uid() = auth_user_id OR public.is_admin());
-
-CREATE POLICY "Parents view own record or admin" ON parents
-    FOR SELECT USING (profile_id = public.get_current_profile_id() OR public.is_admin());
-
-CREATE POLICY "Students view self, parent views child, or admin" ON students
-    FOR SELECT USING (
-        profile_id = public.get_current_profile_id()
-        OR parent_id IN (SELECT id FROM parents WHERE profile_id = public.get_current_profile_id())
-        OR public.is_admin()
-    );
-
-CREATE POLICY "Instructors viewable by all" ON instructors FOR SELECT USING (true);
-CREATE POLICY "Categories viewable by all" ON course_categories FOR SELECT USING (true);
-
-CREATE POLICY "Published courses viewable by all" ON courses
-    FOR SELECT USING (status = 'published' OR public.is_admin());
-
-CREATE POLICY "Modules viewable if course accessible" ON course_modules
-    FOR SELECT USING (EXISTS (SELECT 1 FROM courses c WHERE c.id = course_modules.course_id AND (c.status = 'published' OR public.is_admin())));
-
-CREATE POLICY "Lessons viewable if course accessible" ON lessons
-    FOR SELECT USING (EXISTS (SELECT 1 FROM courses c WHERE c.id = lessons.course_id AND (c.status = 'published' OR public.is_admin())));
-
-CREATE POLICY "Videos metadata viewable by enrolled or preview" ON videos
-    FOR SELECT USING (
-        public.is_admin()
-        OR EXISTS (SELECT 1 FROM lessons l WHERE l.id = videos.lesson_id AND l.is_free_preview = true)
-        OR EXISTS (
-            SELECT 1 FROM enrollments e
-            JOIN students s ON s.id = e.student_id
-            WHERE e.course_id = videos.course_id AND e.status = 'active' AND s.profile_id = public.get_current_profile_id()
-        )
-    );
-
-CREATE POLICY "Enrollments viewable by student, parent, or admin" ON enrollments
-    FOR SELECT USING (
-        student_id IN (SELECT id FROM students WHERE profile_id = public.get_current_profile_id())
-        OR parent_id IN (SELECT id FROM parents WHERE profile_id = public.get_current_profile_id())
-        OR public.is_admin()
-    );
-
-CREATE POLICY "Students self-enroll or admin manage" ON enrollments
-    FOR INSERT WITH CHECK (
-        student_id IN (SELECT id FROM students WHERE profile_id = public.get_current_profile_id())
-        OR public.is_admin()
-    );
-
-CREATE POLICY "Progress viewable by owner or admin" ON student_progress
-    FOR SELECT USING (student_id IN (SELECT id FROM students WHERE profile_id = public.get_current_profile_id()) OR public.is_admin());
-
-CREATE POLICY "Progress updatable by owner or admin" ON student_progress
-    FOR ALL USING (student_id IN (SELECT id FROM students WHERE profile_id = public.get_current_profile_id()) OR public.is_admin());
-
-CREATE POLICY "Public visitor can submit lead" ON leads FOR INSERT WITH CHECK (true);
-CREATE POLICY "Admins manage all leads" ON leads FOR ALL USING (public.is_admin());
-CREATE POLICY "Admins manage lead notes" ON lead_notes FOR ALL USING (public.is_admin());
-
-CREATE POLICY "Users view own transactions, admin views all" ON transactions
-    FOR SELECT USING (
-        student_id IN (SELECT id FROM students WHERE profile_id = public.get_current_profile_id())
-        OR parent_id IN (SELECT id FROM parents WHERE profile_id = public.get_current_profile_id())
-        OR public.is_admin()
-    );
-
-CREATE POLICY "Tests viewable by enrolled or admin" ON tests FOR SELECT USING (is_active = true OR public.is_admin());
-CREATE POLICY "Questions viewable for active tests" ON test_questions FOR SELECT USING (true);
-CREATE POLICY "Answers options viewable" ON test_answers FOR SELECT USING (true);
-
-CREATE POLICY "Attempts viewable by owner or admin" ON test_attempts
-    FOR SELECT USING (student_id IN (SELECT id FROM students WHERE profile_id = public.get_current_profile_id()) OR public.is_admin());
-CREATE POLICY "Students submit attempts" ON test_attempts
-    FOR INSERT WITH CHECK (student_id IN (SELECT id FROM students WHERE profile_id = public.get_current_profile_id()) OR public.is_admin());
-
-CREATE POLICY "Notifications viewable by recipient" ON notifications
-    FOR ALL USING (user_id = public.get_current_profile_id() OR public.is_admin());
-
-CREATE POLICY "Achievements viewable by everyone" ON achievements FOR SELECT USING (true);
-
--- ============================================================================
--- AUTH TRIGGER FOR SUPABASE auth.users SYNCHRONIZATION
--- ============================================================================
-CREATE OR REPLACE FUNCTION public.handle_new_auth_user()
-RETURNS TRIGGER AS $$
-DECLARE
-    user_role TEXT;
-    user_full_name TEXT;
-    user_avatar TEXT;
-    user_phone TEXT;
-    new_profile_id UUID;
-BEGIN
-    user_role := COALESCE(NEW.raw_user_meta_data->>'role', 'student');
-    user_full_name := COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1));
-    user_phone := NEW.raw_user_meta_data->>'phone';
-    user_avatar := COALESCE(
-        NEW.raw_user_meta_data->>'avatar_url',
-        'https://api.dicebear.com/7.x/bottts/svg?seed=' || encode(digest(NEW.email, 'sha256'), 'hex')
-    );
-
-    IF NOT EXISTS (SELECT 1 FROM public.roles WHERE id = user_role) THEN
-        user_role := 'student';
-    END IF;
-
-    INSERT INTO public.profiles (auth_user_id, email, full_name, role, avatar_url, phone, is_active)
-    VALUES (NEW.id, NEW.email, user_full_name, user_role, user_avatar, user_phone, true)
-    ON CONFLICT (email) DO UPDATE SET
-        auth_user_id = NEW.id,
-        full_name = EXCLUDED.full_name,
-        role = EXCLUDED.role,
-        avatar_url = COALESCE(public.profiles.avatar_url, EXCLUDED.avatar_url),
-        phone = COALESCE(public.profiles.phone, EXCLUDED.phone),
-        updated_at = NOW()
-    RETURNING id INTO new_profile_id;
-
-    IF user_role = 'student' THEN
-        INSERT INTO public.students (profile_id, grade_level, school_name, xp_points, badges_count)
-        VALUES (new_profile_id, '4th Grade', 'Discovery Academy', 100, 1)
-        ON CONFLICT (profile_id) DO NOTHING;
-    ELSIF user_role = 'parent' THEN
-        INSERT INTO public.parents (profile_id, emergency_contact, notes)
-        VALUES (new_profile_id, user_phone, 'Account created via Lernal Portal')
-        ON CONFLICT (profile_id) DO NOTHING;
-    ELSIF user_role = 'instructor' THEN
-        INSERT INTO public.instructors (profile_id, title, bio, rating)
-        VALUES (new_profile_id, 'Course Instructor', 'Educator at Lernal LMS', 5.00)
-        ON CONFLICT (profile_id) DO NOTHING;
-    END IF;
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-AFTER INSERT ON auth.users
-FOR EACH ROW EXECUTE FUNCTION public.handle_new_auth_user();

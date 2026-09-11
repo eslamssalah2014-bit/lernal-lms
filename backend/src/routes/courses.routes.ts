@@ -1,175 +1,275 @@
 // ============================================================================
-// COURSES & CURRICULUM ROUTES
-// Public catalog, detailed syllabus, and admin course creation/editing
+// COURSES & CURRICULUM ROUTES (SUPABASE INTEGRATED)
+// Real PostgreSQL queries for course catalog, syllabus, and module administration
 // ============================================================================
 
 import { Router, Request, Response } from 'express';
-import { db, Course, CourseModule, Lesson } from '../data/mockDatabase.js';
+import { supabaseAdmin } from '../services/supabase.js';
 import { authenticate, requireAdmin, optionalAuth, AuthenticatedRequest } from '../middleware/auth.js';
+import { Course, CourseCategory, CourseModule, Lesson } from '../types/database.js';
 
 const router = Router();
 
 // GET /api/courses/categories
-router.get('/categories', (req: Request, res: Response) => {
-  res.json({ success: true, categories: db.categories });
+router.get('/categories', async (req: Request, res: Response) => {
+  try {
+    const { data: categories, error } = await supabaseAdmin
+      .from('course_categories')
+      .select('*')
+      .order('display_order', { ascending: true });
+
+    if (error) throw error;
+    res.json({ success: true, categories: categories || [] });
+  } catch (err: any) {
+    console.error('Error fetching categories from Supabase:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch course categories' });
+  }
 });
 
 // GET /api/courses
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { category, type, search, difficulty, age } = req.query;
 
-  let results = db.courses.filter((c) => c.status === 'published');
+  try {
+    let query = supabaseAdmin
+      .from('courses')
+      .select(`
+        *,
+        category:course_categories(*),
+        instructor:instructors(*, profile:profiles(*))
+      `)
+      .eq('status', 'published');
 
-  if (category) {
-    const cat = db.categories.find((k) => k.slug === category || k.id === category);
-    if (cat) {
-      results = results.filter((c) => c.category_id === cat.id);
+    if (type && (type === 'live' || type === 'recorded')) {
+      query = query.eq('course_type', type);
     }
-  }
 
-  if (type && (type === 'live' || type === 'recorded')) {
-    results = results.filter((c) => c.course_type === type);
-  }
-
-  if (difficulty) {
-    results = results.filter((c) => c.difficulty.toLowerCase() === (difficulty as string).toLowerCase());
-  }
-
-  if (age) {
-    const ageNum = parseInt(age as string, 10);
-    if (!isNaN(ageNum)) {
-      results = results.filter((c) => c.age_min <= ageNum && c.age_max >= ageNum);
+    if (difficulty) {
+      query = query.ilike('difficulty', difficulty as string);
     }
-  }
 
-  if (search) {
-    const q = (search as string).toLowerCase();
-    results = results.filter(
-      (c) =>
-        c.title.toLowerCase().includes(q) ||
-        c.short_description.toLowerCase().includes(q) ||
-        c.learning_outcomes.some((o) => o.toLowerCase().includes(q))
+    if (age) {
+      const ageNum = parseInt(age as string, 10);
+      if (!isNaN(ageNum)) {
+        query = query.lte('age_min', ageNum).gte('age_max', ageNum);
+      }
+    }
+
+    if (search) {
+      const term = `%${(search as string).trim()}%`;
+      query = query.or(`title.ilike.${term},short_description.ilike.${term}`);
+    }
+
+    const { data: courses, error } = await query.order('created_at', { ascending: false });
+    if (error) throw error;
+
+    let filteredCourses = courses || [];
+
+    // Filter by category slug or id if specified
+    if (category) {
+      filteredCourses = filteredCourses.filter(
+        (c: any) => c.category_id === category || c.category?.slug === category
+      );
+    }
+
+    // Hydrate counts (modules, lessons, enrollments)
+    const enriched = await Promise.all(
+      filteredCourses.map(async (course: any) => {
+        const [modulesRes, enrollmentsRes] = await Promise.all([
+          supabaseAdmin.from('course_modules').select('id, lessons(id)').eq('course_id', course.id),
+          supabaseAdmin.from('enrollments').select('id', { count: 'exact', head: true }).eq('course_id', course.id),
+        ]);
+
+        const modules = modulesRes.data || [];
+        const lessonsCount = modules.reduce((acc: number, m: any) => acc + (m.lessons?.length || 0), 0);
+        const enrollmentsCount = enrollmentsRes.count || 0;
+
+        const instructorProfile = course.instructor?.profile;
+
+        return {
+          ...course,
+          instructor: course.instructor
+            ? {
+                ...course.instructor,
+                name: instructorProfile?.full_name || 'Lernal Mentor',
+                avatar_url: instructorProfile?.avatar_url || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+              }
+            : null,
+          stats: {
+            modules_count: modules.length,
+            lessons_count: lessonsCount,
+            enrollments_count: enrollmentsCount,
+          },
+        };
+      })
     );
+
+    res.json({ success: true, count: enriched.length, courses: enriched });
+  } catch (err: any) {
+    console.error('Error fetching courses from Supabase:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch courses' });
   }
-
-  // Hydrate with instructor & category details
-  const enriched = results.map((course) => {
-    const categoryObj = db.categories.find((cat) => cat.id === course.category_id);
-    const instructorObj = db.instructors.find((ins) => ins.id === course.instructor_id);
-    const instructorProfile = instructorObj
-      ? db.profiles.find((p) => p.id === instructorObj.profile_id)
-      : null;
-
-    const courseModules = db.modules.filter((m) => m.course_id === course.id);
-    const lessonsCount = courseModules.reduce((acc, m) => acc + (m.lessons?.length || 0), 0);
-    const enrollmentsCount = db.enrollments.filter((e) => e.course_id === course.id).length;
-
-    return {
-      ...course,
-      category: categoryObj,
-      instructor: instructorObj && instructorProfile
-        ? {
-            ...instructorObj,
-            name: instructorProfile.full_name,
-            avatar_url: instructorProfile.avatar_url,
-          }
-        : null,
-      stats: {
-        modules_count: courseModules.length,
-        lessons_count: lessonsCount,
-        enrollments_count: enrollmentsCount,
-      },
-    };
-  });
-
-  res.json({ success: true, count: enriched.length, courses: enriched });
 });
 
 // GET /api/courses/:idOrSlug
-router.get('/:idOrSlug', optionalAuth, (req: AuthenticatedRequest, res: Response) => {
+router.get('/:idOrSlug', optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
   const { idOrSlug } = req.params;
 
-  const course = db.courses.find((c) => c.id === idOrSlug || c.slug === idOrSlug);
-  if (!course) {
-    return res.status(404).json({ error: 'Course not found' });
-  }
+  try {
+    // 1. Fetch course details
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
+    let courseQuery = supabaseAdmin
+      .from('courses')
+      .select(`
+        *,
+        category:course_categories(*),
+        instructor:instructors(*, profile:profiles(*))
+      `);
 
-  const categoryObj = db.categories.find((cat) => cat.id === course.category_id);
-  const instructorObj = db.instructors.find((ins) => ins.id === course.instructor_id);
-  const instructorProfile = instructorObj
-    ? db.profiles.find((p) => p.id === instructorObj.profile_id)
-    : null;
-
-  const courseModules = db.modules
-    .filter((m) => m.course_id === course.id)
-    .sort((a, b) => a.order_index - b.order_index);
-
-  // Check if current user is enrolled
-  let isEnrolled = false;
-  let enrollmentDetails: any = null;
-
-  if (req.user) {
-    const student = db.students.find((s) => s.profile_id === req.user!.id);
-    if (student) {
-      const enrollment = db.enrollments.find(
-        (e) => e.student_id === student.id && e.course_id === course.id && e.status === 'active'
-      );
-      if (enrollment) {
-        isEnrolled = true;
-        enrollmentDetails = enrollment;
-      }
-    } else if (req.user.role === 'admin') {
-      isEnrolled = true;
+    if (isUUID) {
+      courseQuery = courseQuery.or(`id.eq.${idOrSlug},slug.eq.${idOrSlug}`);
+    } else {
+      courseQuery = courseQuery.eq('slug', idOrSlug);
     }
-  }
 
-  // Hydrate syllabus (hide video source URLs for non-free preview lessons unless enrolled)
-  const sanitizedModules = courseModules.map((module) => ({
-    ...module,
-    lessons: (module.lessons || []).map((lesson) => ({
-      id: lesson.id,
-      module_id: lesson.module_id,
-      course_id: lesson.course_id,
-      title: lesson.title,
-      description: lesson.description,
-      duration_minutes: lesson.duration_minutes,
-      order_index: lesson.order_index,
-      is_free_preview: lesson.is_free_preview,
-      has_video: Boolean(lesson.bunny_video_id || lesson.video_url),
-      can_access: isEnrolled || lesson.is_free_preview,
-      resources: isEnrolled || lesson.is_free_preview ? lesson.resources : [],
-    })),
-  }));
+    const { data: course, error: courseError } = await courseQuery.maybeSingle();
 
-  const totalLessons = sanitizedModules.reduce((acc, m) => acc + m.lessons.length, 0);
+    if (courseError) throw courseError;
+    if (!course) {
+      return res.status(404).json({ error: 'Course not found' });
+    }
 
-  res.json({
-    success: true,
-    course: {
-      ...course,
-      category: categoryObj,
-      instructor: instructorObj && instructorProfile
-        ? {
-            ...instructorObj,
-            name: instructorProfile.full_name,
-            avatar_url: instructorProfile.avatar_url,
+    // 2. Fetch modules & lessons with videos
+    const { data: modules, error: modulesError } = await supabaseAdmin
+      .from('course_modules')
+      .select(`
+        *,
+        lessons:lessons(
+          *,
+          videos:videos(bunny_video_id, duration_seconds, thumbnail_url),
+          resources:lesson_resources(*)
+        )
+      `)
+      .eq('course_id', course.id)
+      .order('order_index', { ascending: true });
+
+    if (modulesError) throw modulesError;
+
+    // 3. Check enrollment authorization for current user
+    let isEnrolled = false;
+    let enrollmentDetails: any = null;
+
+    if (req.user) {
+      if (req.user.role === 'admin') {
+        isEnrolled = true;
+      } else if (req.user.role === 'student') {
+        const { data: student } = await supabaseAdmin
+          .from('students')
+          .select('id')
+          .eq('profile_id', req.user.id)
+          .maybeSingle();
+
+        if (student) {
+          const { data: enrollment } = await supabaseAdmin
+            .from('enrollments')
+            .select('*')
+            .eq('student_id', student.id)
+            .eq('course_id', course.id)
+            .eq('status', 'active')
+            .maybeSingle();
+
+          if (enrollment) {
+            isEnrolled = true;
+            enrollmentDetails = enrollment;
           }
-        : null,
-      modules: sanitizedModules,
-      stats: {
-        total_modules: sanitizedModules.length,
-        total_lessons: totalLessons,
+        }
+      } else if (req.user.role === 'parent') {
+        const { data: parent } = await supabaseAdmin
+          .from('parents')
+          .select('id')
+          .eq('profile_id', req.user.id)
+          .maybeSingle();
+
+        if (parent) {
+          const { data: enrollment } = await supabaseAdmin
+            .from('enrollments')
+            .select('*')
+            .eq('parent_id', parent.id)
+            .eq('course_id', course.id)
+            .eq('status', 'active')
+            .maybeSingle();
+
+          if (enrollment) {
+            isEnrolled = true;
+            enrollmentDetails = enrollment;
+          }
+        }
+      }
+    }
+
+    // 4. Sanitize lessons (protect non-preview video URLs & resources)
+    const sanitizedModules = (modules || []).map((module: any) => {
+      const sortedLessons = (module.lessons || []).sort(
+        (a: any, b: any) => a.order_index - b.order_index
+      );
+
+      return {
+        ...module,
+        lessons: sortedLessons.map((lesson: any) => {
+          const videoMeta = lesson.videos?.[0] || lesson.videos;
+          const canAccess = isEnrolled || lesson.is_free_preview;
+
+          return {
+            id: lesson.id,
+            module_id: lesson.module_id,
+            course_id: lesson.course_id,
+            title: lesson.title,
+            description: lesson.description,
+            duration_minutes: lesson.duration_minutes,
+            order_index: lesson.order_index,
+            is_free_preview: lesson.is_free_preview,
+            has_video: Boolean(videoMeta?.bunny_video_id),
+            can_access: canAccess,
+            bunny_video_id: canAccess ? videoMeta?.bunny_video_id : undefined,
+            resources: canAccess ? lesson.resources || [] : [],
+          };
+        }),
+      };
+    });
+
+    const totalLessons = sanitizedModules.reduce((acc, m) => acc + m.lessons.length, 0);
+    const instructorProfile = course.instructor?.profile;
+
+    res.json({
+      success: true,
+      course: {
+        ...course,
+        instructor: course.instructor
+          ? {
+              ...course.instructor,
+              name: instructorProfile?.full_name || 'Lernal Mentor',
+              avatar_url: instructorProfile?.avatar_url || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+            }
+          : null,
+        modules: sanitizedModules,
+        stats: {
+          total_modules: sanitizedModules.length,
+          total_lessons: totalLessons,
+        },
+        user_access: {
+          is_enrolled: isEnrolled,
+          enrollment: enrollmentDetails,
+        },
       },
-      user_access: {
-        is_enrolled: isEnrolled,
-        enrollment: enrollmentDetails,
-      },
-    },
-  });
+    });
+  } catch (err: any) {
+    console.error('Error fetching course syllabus from Supabase:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch course details' });
+  }
 });
 
 // POST /api/courses (Admin only)
-router.post('/', authenticate, requireAdmin, (req: AuthenticatedRequest, res: Response) => {
+router.post('/', authenticate, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
   const {
     title,
     slug,
@@ -195,86 +295,137 @@ router.post('/', authenticate, requireAdmin, (req: AuthenticatedRequest, res: Re
 
   const newSlug = slug || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
-  const newCourse: Course = {
-    id: `crs-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-    title,
-    slug: newSlug,
-    short_description,
-    full_description: full_description || short_description,
-    category_id: category_id || db.categories[0].id,
-    instructor_id: instructor_id || db.instructors[0].id,
-    course_type,
-    price: Number(price),
-    currency,
-    age_min: Number(age_min),
-    age_max: Number(age_max),
-    duration_hours: Number(duration_hours),
-    difficulty,
-    status: 'published',
-    is_featured: false,
-    thumbnail_url: thumbnail_url || 'https://images.unsplash.com/photo-1588702547923-7093a6c3ba33?w=800',
-    learning_outcomes: Array.isArray(learning_outcomes) ? learning_outcomes : [learning_outcomes],
-    schedule_details,
-    created_at: new Date().toISOString(),
-  };
+  try {
+    const { data: newCourse, error } = await supabaseAdmin
+      .from('courses')
+      .insert([
+        {
+          title,
+          slug: newSlug,
+          short_description,
+          full_description: full_description || short_description,
+          category_id: category_id || null,
+          instructor_id: instructor_id || null,
+          course_type,
+          price: Number(price),
+          currency,
+          age_min: Number(age_min),
+          age_max: Number(age_max),
+          duration_hours: Number(duration_hours),
+          difficulty,
+          status: 'published',
+          is_featured: false,
+          thumbnail_url: thumbnail_url || 'https://images.unsplash.com/photo-1588702547923-7093a6c3ba33?w=800',
+          learning_outcomes: Array.isArray(learning_outcomes) ? learning_outcomes : [learning_outcomes],
+          schedule_details,
+        },
+      ])
+      .select('*')
+      .single();
 
-  db.courses.unshift(newCourse);
-
-  res.status(201).json({ success: true, course: newCourse });
+    if (error) throw error;
+    res.status(201).json({ success: true, course: newCourse });
+  } catch (err: any) {
+    console.error('Error creating course in Supabase:', err);
+    res.status(500).json({ error: err.message || 'Failed to create course' });
+  }
 });
 
 // POST /api/courses/:id/modules (Admin only)
-router.post('/:id/modules', authenticate, requireAdmin, (req: AuthenticatedRequest, res: Response) => {
+router.post('/:id/modules', authenticate, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
   const { title, description } = req.body;
 
-  const course = db.courses.find((c) => c.id === id);
-  if (!course) {
-    return res.status(404).json({ error: 'Course not found' });
+  try {
+    const { count } = await supabaseAdmin
+      .from('course_modules')
+      .select('id', { count: 'exact', head: true })
+      .eq('course_id', id);
+
+    const orderIndex = (count || 0) + 1;
+
+    const { data: newModule, error } = await supabaseAdmin
+      .from('course_modules')
+      .insert([
+        {
+          course_id: id,
+          title: title || `Module ${orderIndex}`,
+          description: description || '',
+          order_index: orderIndex,
+        },
+      ])
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    res.status(201).json({ success: true, module: newModule });
+  } catch (err: any) {
+    console.error('Error creating course module in Supabase:', err);
+    res.status(500).json({ error: err.message || 'Failed to create module' });
   }
-
-  const existingModules = db.modules.filter((m) => m.course_id === id);
-  const newModule: CourseModule = {
-    id: `mod-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-    course_id: id,
-    title: title || `Module ${existingModules.length + 1}`,
-    description: description || '',
-    order_index: existingModules.length + 1,
-    lessons: [],
-  };
-
-  db.modules.push(newModule);
-
-  res.status(201).json({ success: true, module: newModule });
 });
 
-// POST /api/modules/:moduleId/lessons (Admin only)
-router.post('/modules/:moduleId/lessons', authenticate, requireAdmin, (req: AuthenticatedRequest, res: Response) => {
+// POST /api/courses/modules/:moduleId/lessons (Admin only)
+router.post('/modules/:moduleId/lessons', authenticate, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
   const { moduleId } = req.params;
-  const { title, description, duration_minutes = 15, is_free_preview = false, bunny_video_id, video_url } = req.body;
+  const { title, description, duration_minutes = 15, is_free_preview = false, bunny_video_id } = req.body;
 
-  const moduleObj = db.modules.find((m) => m.id === moduleId);
-  if (!moduleObj) {
-    return res.status(404).json({ error: 'Module not found' });
+  try {
+    const { data: moduleRecord, error: modErr } = await supabaseAdmin
+      .from('course_modules')
+      .select('course_id')
+      .eq('id', moduleId)
+      .single();
+
+    if (modErr || !moduleRecord) {
+      return res.status(404).json({ error: 'Module not found' });
+    }
+
+    const { count } = await supabaseAdmin
+      .from('lessons')
+      .select('id', { count: 'exact', head: true })
+      .eq('module_id', moduleId);
+
+    const orderIndex = (count || 0) + 1;
+
+    // 1. Insert lesson
+    const { data: newLesson, error: lessonErr } = await supabaseAdmin
+      .from('lessons')
+      .insert([
+        {
+          module_id: moduleId,
+          course_id: moduleRecord.course_id,
+          title: title || 'New Lesson',
+          description: description || '',
+          duration_minutes: Number(duration_minutes),
+          order_index: orderIndex,
+          is_free_preview: Boolean(is_free_preview),
+        },
+      ])
+      .select('*')
+      .single();
+
+    if (lessonErr) throw lessonErr;
+
+    // 2. Insert Bunny Stream video metadata if provided
+    if (bunny_video_id) {
+      await supabaseAdmin.from('videos').insert([
+        {
+          lesson_id: newLesson.id,
+          course_id: moduleRecord.course_id,
+          bunny_video_id,
+          title: newLesson.title,
+          duration_seconds: Number(duration_minutes) * 60,
+          status: 'ready',
+        },
+      ]);
+    }
+
+    res.status(201).json({ success: true, lesson: newLesson });
+  } catch (err: any) {
+    console.error('Error creating lesson in Supabase:', err);
+    res.status(500).json({ error: err.message || 'Failed to create lesson' });
   }
-
-  const newLesson: Lesson = {
-    id: `les-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-    module_id: moduleId,
-    course_id: moduleObj.course_id,
-    title: title || 'New Lesson',
-    description: description || '',
-    duration_minutes: Number(duration_minutes),
-    order_index: (moduleObj.lessons?.length || 0) + 1,
-    is_free_preview: Boolean(is_free_preview),
-    bunny_video_id: bunny_video_id || `bunny_vid_lernal_${Date.now()}`,
-    video_url: video_url || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-    resources: [],
-  };
-
-  moduleObj.lessons.push(newLesson);
-
-  res.status(201).json({ success: true, lesson: newLesson });
 });
 
 export default router;

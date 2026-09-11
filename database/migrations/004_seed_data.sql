@@ -1,7 +1,6 @@
 -- ============================================================================
--- LERNAL LMS - MASTER SEED DATA (Supabase PostgreSQL)
--- Tagline: SINCE 2026
--- Authentic EdTech Sample Data for Children, Parents, Instructors & CRM
+-- LERNAL LMS - MIGRATION 004: COMPREHENSIVE SEED DATA
+-- Production-grade authentic development dataset for children & parents
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -176,16 +175,22 @@ ON CONFLICT (slug) DO UPDATE SET
 -- ----------------------------------------------------------------------------
 -- 5. COURSE MODULES & LESSONS
 -- ----------------------------------------------------------------------------
+-- Modules for Course 1
 INSERT INTO course_modules (id, course_id, title, description, order_index) VALUES
 ('77777777-0000-0000-0000-000000000001', '66666666-0000-0000-0000-000000000001', 'Module 1: The Magician of Code (Scratch Basics)', 'Meet the canvas, sprites, coordinate systems, and your first animated story.', 1),
 ('77777777-0000-0000-0000-000000000002', '66666666-0000-0000-0000-000000000001', 'Module 2: Loops, Logic & Catch Games', 'Learn repetition, condition blocks (if-then), collision detection, and score counters.', 2),
 ('77777777-0000-0000-0000-000000000003', '66666666-0000-0000-0000-000000000001', 'Module 3: Leaping into Real Python', 'Graduating from drag-and-drop blocks to clean, elegant Python statements.', 3)
 ON CONFLICT DO NOTHING;
 
+-- Lessons for Module 1
 INSERT INTO lessons (id, module_id, course_id, title, description, duration_minutes, order_index, is_free_preview) VALUES
 ('88888888-0000-0000-0000-000000000001', '77777777-0000-0000-0000-000000000001', '66666666-0000-0000-0000-000000000001', 'Lesson 1.1: Welcome to the Coding Realm', 'Discover how software powers the world and meet your Scratch editor playground.', 12, 1, true),
 ('88888888-0000-0000-0000-000000000002', '77777777-0000-0000-0000-000000000001', '66666666-0000-0000-0000-000000000001', 'Lesson 1.2: Moving Sprites with X & Y Coordinates', 'Understand 2D coordinate planes by making your character dance on beat.', 15, 2, false),
-('88888888-0000-0000-0000-000000000003', '77777777-0000-0000-0000-000000000001', '66666666-0000-0000-0000-000000000001', 'Lesson 1.3: Voice and Sound Effects in Code', 'Record sounds, add music loops, and trigger humorous voice lines.', 14, 3, false),
+('88888888-0000-0000-0000-000000000003', '77777777-0000-0000-0000-000000000001', '66666666-0000-0000-0000-000000000001', 'Lesson 1.3: Voice and Sound Effects in Code', 'Record sounds, add music loops, and trigger humorous voice lines.', 14, 3, false)
+ON CONFLICT DO NOTHING;
+
+-- Lessons for Module 2
+INSERT INTO lessons (id, module_id, course_id, title, description, duration_minutes, order_index, is_free_preview) VALUES
 ('88888888-0000-0000-0000-000000000004', '77777777-0000-0000-0000-000000000002', '66666666-0000-0000-0000-000000000001', 'Lesson 2.1: Infinite Loops and Gliders', 'Master the "forever" loop and build continuous starfield backgrounds.', 18, 1, false),
 ('88888888-0000-0000-0000-000000000005', '77777777-0000-0000-0000-000000000002', '66666666-0000-0000-0000-000000000001', 'Lesson 2.2: Building the Apple Catcher Game', 'Implement paddle movement, falling gravity, and dynamic score calculation.', 22, 2, false)
 ON CONFLICT DO NOTHING;
@@ -224,18 +229,18 @@ ON CONFLICT (lesson_id) DO UPDATE SET
 INSERT INTO enrollments (id, student_id, parent_id, course_id, status, progress_percentage, enrolled_at) VALUES
 (
     'aaaaaaaa-0000-0000-0000-000000000001',
-    '55555555-0000-0000-0000-000000000001',
-    '44444444-0000-0000-0000-000000000001',
-    '66666666-0000-0000-0000-000000000001',
+    '55555555-0000-0000-0000-000000000001', -- Leo Wright
+    '44444444-0000-0000-0000-000000000001', -- Eleanor Wright
+    '66666666-0000-0000-0000-000000000001', -- Creative Coding
     'active',
     66.7,
     NOW() - INTERVAL '14 days'
 ),
 (
     'aaaaaaaa-0000-0000-0000-000000000002',
-    '55555555-0000-0000-0000-000000000002',
-    '44444444-0000-0000-0000-000000000002',
-    '66666666-0000-0000-0000-000000000002',
+    '55555555-0000-0000-0000-000000000002', -- Sophie Chen
+    '44444444-0000-0000-0000-000000000002', -- David Chen
+    '66666666-0000-0000-0000-000000000002', -- AI Explorers
     'active',
     35.0,
     NOW() - INTERVAL '7 days'
@@ -243,6 +248,7 @@ INSERT INTO enrollments (id, student_id, parent_id, course_id, status, progress_
 ON CONFLICT (student_id, course_id) DO UPDATE SET
     progress_percentage = EXCLUDED.progress_percentage;
 
+-- Student Progress for Leo
 INSERT INTO student_progress (student_id, lesson_id, course_id, is_completed, watch_time_seconds, completed_at) VALUES
 ('55555555-0000-0000-0000-000000000001', '88888888-0000-0000-0000-000000000001', '66666666-0000-0000-0000-000000000001', true, 720, NOW() - INTERVAL '10 days'),
 ('55555555-0000-0000-0000-000000000001', '88888888-0000-0000-0000-000000000002', '66666666-0000-0000-0000-000000000001', true, 900, NOW() - INTERVAL '5 days'),
@@ -299,13 +305,14 @@ INSERT INTO leads (id, parent_name, child_name, email, phone, course_id, source,
 )
 ON CONFLICT DO NOTHING;
 
+-- Lead Notes
 INSERT INTO lead_notes (id, lead_id, admin_id, note, created_at) VALUES
 ('cccccccc-0000-0000-0000-000000000001', 'bbbbbbbb-0000-0000-0000-000000000002', '22222222-0000-0000-0000-000000000001', 'Called parent Robert. He requested syllabus PDF and schedule for Saturday cohort.', NOW() - INTERVAL '20 hours'),
 ('cccccccc-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000003', '22222222-0000-0000-0000-000000000001', 'Payment completed via Stripe link. Successfully converted lead to enrolled student Oliver.', NOW() - INTERVAL '3 days')
 ON CONFLICT DO NOTHING;
 
 -- ----------------------------------------------------------------------------
--- 9. TRANSACTIONS
+-- 9. TRANSACTIONS (FINANCIAL LEDGER)
 -- ----------------------------------------------------------------------------
 INSERT INTO transactions (id, reference_no, student_id, parent_id, course_id, amount, currency, payment_method, payment_status, created_at) VALUES
 (
@@ -364,20 +371,27 @@ INSERT INTO tests (id, course_id, module_id, title, description, passing_score, 
 )
 ON CONFLICT DO NOTHING;
 
+-- Question 1
 INSERT INTO test_questions (id, test_id, question_text, question_type, points, order_index) VALUES
 ('ffffffff-0000-0000-0000-000000000001', 'eeeeeeee-0000-0000-0000-000000000001', 'In Scratch 2D plane, what happens to a sprite when you change X by +50?', 'single_choice', 10, 1),
 ('ffffffff-0000-0000-0000-000000000002', 'eeeeeeee-0000-0000-0000-000000000001', 'Which block makes a sequence repeat forever?', 'single_choice', 10, 2)
 ON CONFLICT DO NOTHING;
 
+-- Answers for Q1
 INSERT INTO test_answers (id, question_id, answer_text, is_correct, order_index) VALUES
 ('12121212-0000-0000-0000-000000000001', 'ffffffff-0000-0000-0000-000000000001', 'The sprite moves 50 steps to the RIGHT', true, 1),
 ('12121212-0000-0000-0000-000000000002', 'ffffffff-0000-0000-0000-000000000001', 'The sprite moves 50 steps to the LEFT', false, 2),
-('12121212-0000-0000-0000-000000000003', 'ffffffff-0000-0000-0000-000000000001', 'The sprite jumps 50 steps UP', false, 3),
+('12121212-0000-0000-0000-000000000003', 'ffffffff-0000-0000-0000-000000000001', 'The sprite jumps 50 steps UP', false, 3)
+ON CONFLICT DO NOTHING;
+
+-- Answers for Q2
+INSERT INTO test_answers (id, question_id, answer_text, is_correct, order_index) VALUES
 ('12121212-0000-0000-0000-000000000004', 'ffffffff-0000-0000-0000-000000000002', 'forever [ ] block', true, 1),
 ('12121212-0000-0000-0000-000000000005', 'ffffffff-0000-0000-0000-000000000002', 'repeat (10) [ ] block', false, 2),
 ('12121212-0000-0000-0000-000000000006', 'ffffffff-0000-0000-0000-000000000002', 'if <touching> then [ ] block', false, 3)
 ON CONFLICT DO NOTHING;
 
+-- Test Attempt for Leo
 INSERT INTO test_attempts (id, test_id, student_id, attempt_number, score, max_score, percentage, passed, started_at, completed_at) VALUES
 (
     '13131313-0000-0000-0000-000000000001',
@@ -393,6 +407,9 @@ INSERT INTO test_attempts (id, test_id, student_id, attempt_number, score, max_s
 )
 ON CONFLICT DO NOTHING;
 
+-- ----------------------------------------------------------------------------
+-- 11. ACHIEVEMENTS & NOTIFICATIONS
+-- ----------------------------------------------------------------------------
 INSERT INTO achievements (id, student_id, title, description, badge_icon, earned_at) VALUES
 ('14141414-0000-0000-0000-000000000001', '55555555-0000-0000-0000-000000000001', 'First Code Spark ⚡', 'Completed first interactive lesson in Scratch', 'Zap', NOW() - INTERVAL '10 days'),
 ('14141414-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000001', 'Perfect Score 🎯', 'Earned 100% on Module 1 Checkpoint Assessment', 'Award', NOW() - INTERVAL '4 days')
