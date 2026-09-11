@@ -1,42 +1,52 @@
 // ============================================================================
 // LERNAL LMS - MAIN APPLICATION ROUTER
 // Seamlessly unites Public, Student, Parent, and Admin experiences
+// Optimized with React.lazy code-splitting and Suspense for Vercel Edge performance
 // ============================================================================
 
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { Navbar } from './components/common/Navbar';
 import { Footer } from './components/common/Footer';
 
-// Public Pages
-import { HomePage } from './pages/public/HomePage';
-import { CourseCatalogPage } from './pages/public/CourseCatalogPage';
-import { CourseDetailsPage } from './pages/public/CourseDetailsPage';
-import { RecordedCoursesPage } from './pages/public/RecordedCoursesPage';
+// Code-split dynamic page imports for optimal bundle size & fast FCP on Vercel
+const HomePage = lazy(() => import('./pages/public/HomePage').then(m => ({ default: m.HomePage })));
+const CourseCatalogPage = lazy(() => import('./pages/public/CourseCatalogPage').then(m => ({ default: m.CourseCatalogPage })));
+const CourseDetailsPage = lazy(() => import('./pages/public/CourseDetailsPage').then(m => ({ default: m.CourseDetailsPage })));
+const RecordedCoursesPage = lazy(() => import('./pages/public/RecordedCoursesPage').then(m => ({ default: m.RecordedCoursesPage })));
 
-// Student Pages
-import { StudentDashboardPage } from './pages/student/StudentDashboardPage';
-import { CoursePlayerPage } from './pages/student/CoursePlayerPage';
-import { QuizTakePage } from './pages/student/QuizTakePage';
+const StudentDashboardPage = lazy(() => import('./pages/student/StudentDashboardPage').then(m => ({ default: m.StudentDashboardPage })));
+const CoursePlayerPage = lazy(() => import('./pages/student/CoursePlayerPage').then(m => ({ default: m.CoursePlayerPage })));
+const QuizTakePage = lazy(() => import('./pages/student/QuizTakePage').then(m => ({ default: m.QuizTakePage })));
 
-// Parent Pages
-import { ParentDashboardPage } from './pages/parent/ParentDashboardPage';
+const ParentDashboardPage = lazy(() => import('./pages/parent/ParentDashboardPage').then(m => ({ default: m.ParentDashboardPage })));
 
-// Admin Pages
-import { AdminLayout } from './pages/admin/AdminLayout';
-import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
-import { AdminLeadsCenterPage } from './pages/admin/AdminLeadsCenterPage';
-import { AdminFinancePage } from './pages/admin/AdminFinancePage';
-import { AdminCoursesPage } from './pages/admin/AdminCoursesPage';
-import { AdminTestingPage } from './pages/admin/AdminTestingPage';
-import { AdminRostersPage } from './pages/admin/AdminRostersPage';
+const AdminLayout = lazy(() => import('./pages/admin/AdminLayout').then(m => ({ default: m.AdminLayout })));
+const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage').then(m => ({ default: m.AdminDashboardPage })));
+const AdminLeadsCenterPage = lazy(() => import('./pages/admin/AdminLeadsCenterPage').then(m => ({ default: m.AdminLeadsCenterPage })));
+const AdminFinancePage = lazy(() => import('./pages/admin/AdminFinancePage').then(m => ({ default: m.AdminFinancePage })));
+const AdminCoursesPage = lazy(() => import('./pages/admin/AdminCoursesPage').then(m => ({ default: m.AdminCoursesPage })));
+const AdminTestingPage = lazy(() => import('./pages/admin/AdminTestingPage').then(m => ({ default: m.AdminTestingPage })));
+const AdminRostersPage = lazy(() => import('./pages/admin/AdminRostersPage').then(m => ({ default: m.AdminRostersPage })));
+
+// Branded loading spinner for asynchronous route chunks
+const PageLoader: React.FC = () => (
+  <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4" role="status" aria-label="Loading page">
+    <div className="w-12 h-12 border-4 border-[#00A9D6]/20 border-t-[#00A9D6] rounded-full animate-spin"></div>
+    <p className="text-[#8DDFFF] text-sm font-medium tracking-wide">Loading Lernal...</p>
+  </div>
+);
 
 // Public Shell wrapper with Navbar and Footer
 const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="min-h-screen flex flex-col bg-[#00212D]">
     <Navbar />
-    <main className="flex-1">{children}</main>
+    <main className="flex-1">
+      <Suspense fallback={<PageLoader />}>
+        {children}
+      </Suspense>
+    </main>
     <Footer />
   </div>
 );
@@ -45,90 +55,92 @@ export const App: React.FC = () => {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <Routes>
-          {/* Public & Student / Parent Routes with Brand Navbar & Footer */}
-          <Route
-            path="/"
-            element={
-              <PublicLayout>
-                <HomePage />
-              </PublicLayout>
-            }
-          />
-          <Route
-            path="/courses"
-            element={
-              <PublicLayout>
-                <CourseCatalogPage />
-              </PublicLayout>
-            }
-          />
-          <Route
-            path="/courses/:slug"
-            element={
-              <PublicLayout>
-                <CourseDetailsPage />
-              </PublicLayout>
-            }
-          />
-          <Route
-            path="/recorded"
-            element={
-              <PublicLayout>
-                <RecordedCoursesPage />
-              </PublicLayout>
-            }
-          />
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            {/* Public & Student / Parent Routes with Brand Navbar & Footer */}
+            <Route
+              path="/"
+              element={
+                <PublicLayout>
+                  <HomePage />
+                </PublicLayout>
+              }
+            />
+            <Route
+              path="/courses"
+              element={
+                <PublicLayout>
+                  <CourseCatalogPage />
+                </PublicLayout>
+              }
+            />
+            <Route
+              path="/courses/:slug"
+              element={
+                <PublicLayout>
+                  <CourseDetailsPage />
+                </PublicLayout>
+              }
+            />
+            <Route
+              path="/recorded"
+              element={
+                <PublicLayout>
+                  <RecordedCoursesPage />
+                </PublicLayout>
+              }
+            />
 
-          {/* Student Hub */}
-          <Route
-            path="/student/dashboard"
-            element={
-              <PublicLayout>
-                <StudentDashboardPage />
-              </PublicLayout>
-            }
-          />
-          <Route
-            path="/student/courses/:courseId/play"
-            element={
-              <PublicLayout>
-                <CoursePlayerPage />
-              </PublicLayout>
-            }
-          />
-          <Route
-            path="/student/tests/:testId"
-            element={
-              <PublicLayout>
-                <QuizTakePage />
-              </PublicLayout>
-            }
-          />
+            {/* Student Hub */}
+            <Route
+              path="/student/dashboard"
+              element={
+                <PublicLayout>
+                  <StudentDashboardPage />
+                </PublicLayout>
+              }
+            />
+            <Route
+              path="/student/courses/:courseId/play"
+              element={
+                <PublicLayout>
+                  <CoursePlayerPage />
+                </PublicLayout>
+              }
+            />
+            <Route
+              path="/student/tests/:testId"
+              element={
+                <PublicLayout>
+                  <QuizTakePage />
+                </PublicLayout>
+              }
+            />
 
-          {/* Parent Portal */}
-          <Route
-            path="/parent/dashboard"
-            element={
-              <PublicLayout>
-                <ParentDashboardPage />
-              </PublicLayout>
-            }
-          />
+            {/* Parent Portal */}
+            <Route
+              path="/parent/dashboard"
+              element={
+                <PublicLayout>
+                  <ParentDashboardPage />
+                </PublicLayout>
+              }
+            />
 
-          {/* Admin Command Center (Dedicated Layout) */}
-          <Route path="/admin" element={<AdminLayout />}>
-            <Route index element={<AdminDashboardPage />} />
-            <Route path="leads" element={<AdminLeadsCenterPage />} />
-            <Route path="finance" element={<AdminFinancePage />} />
-            <Route path="courses" element={<AdminCoursesPage />} />
-            <Route path="testing" element={<AdminTestingPage />} />
-            <Route path="rosters" element={<AdminRostersPage />} />
-          </Route>
+            {/* Admin Command Center (Dedicated Layout) */}
+            <Route path="/admin" element={<AdminLayout />}>
+              <Route index element={<AdminDashboardPage />} />
+              <Route path="leads" element={<AdminLeadsCenterPage />} />
+              <Route path="finance" element={<AdminFinancePage />} />
+              <Route path="courses" element={<AdminCoursesPage />} />
+              <Route path="testing" element={<AdminTestingPage />} />
+              <Route path="rosters" element={<AdminRostersPage />} />
+            </Route>
 
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </AuthProvider>
   );

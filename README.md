@@ -269,18 +269,19 @@ Visit **http://localhost:5173** in your browser. Use the **Demo Role** switcher 
 4. Note your public backend URL (e.g. `https://lernal-lms-api.onrender.com`).
 
 ### 4. 🌐 Vercel Deployment (Frontend Client)
-1. Import your repository into [vercel.com](https://vercel.com).
+1. Import `https://github.com/eslamssalah2014-bit/lernal-lms` into [vercel.com](https://vercel.com).
 2. Configure project settings:
    - **Framework Preset:** `Vite`
-   - **Root Directory:** `frontend`
+   - **Root Directory:** `frontend` (or leave as `./` with included root `vercel.json`)
    - **Build Command:** `npm run build`
    - **Output Directory:** `dist`
+   - **Install Command:** `npm install`
 3. Add environment variables:
-   - `VITE_API_URL`: `https://lernal-lms-api.onrender.com/api`
-   - `VITE_SUPABASE_URL`: Your Supabase URL
-   - `VITE_SUPABASE_ANON_KEY`: Your Supabase Anon Key
-   - `VITE_BUNNY_CDN_HOSTNAME`: Your Bunny CDN Hostname
-4. Click **Deploy**. The included `frontend/vercel.json` ensures all SPA routes resolve correctly.
+   - `NEXT_PUBLIC_API_URL`: `https://lernal-lms-api.onrender.com` (or `VITE_API_URL`)
+   - `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase Project URL
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Your Supabase Public Anon Key
+   - `NEXT_PUBLIC_BUNNY_CDN_HOSTNAME`: Your Bunny Stream CDN Hostname
+4. Click **Deploy**. The included `vercel.json` applies security headers, static asset caching, and SPA route rewrites.
 
 For full deployment walkthroughs and screenshots, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 

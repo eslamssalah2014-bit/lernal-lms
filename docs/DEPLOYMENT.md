@@ -70,23 +70,36 @@ This guide provides end-to-end instructions for deploying the Lernal LMS ecosyst
 
 ## 4. 🌐 Vercel Frontend Deployment (`/frontend`)
 
+You can deploy using either of the following configurations:
+
+### Option A: Standard Monorepo Deployment (Recommended)
 1. Log in to [Vercel Dashboard](https://vercel.com).
-2. Click **Add New... > Project** and import your GitHub repository.
-3. Configure the project:
-   - **Framework Preset:** `Vite`
-   - **Root Directory:** Edit and set to `frontend`
-   - **Build Command:** `npm run build`
-   - **Output Directory:** `dist`
-   - **Install Command:** `npm install`
-4. Expand **Environment Variables** and add:
-   ```env
-   VITE_API_URL=https://lernal-lms-api.onrender.com/api
-   VITE_SUPABASE_URL=https://your-project.supabase.co
-   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-   VITE_BUNNY_CDN_HOSTNAME=vz-xxxx.b-cdn.net
-   ```
-5. Click **Deploy**.
-6. The `frontend/vercel.json` ensures all client-side routes (e.g., `/student/dashboard`, `/admin/leads`) automatically rewrite to `/index.html`.
+2. Click **Add New... > Project** and import `https://github.com/eslamssalah2014-bit/lernal-lms`.
+3. In project setup:
+   - **Root Directory:** Click `Edit` and select `frontend`.
+   - **Framework Preset:** `Vite` (automatically detected).
+   - **Build Command:** `npm run build` (or `tsc && vite build`).
+   - **Output Directory:** `dist`.
+   - **Install Command:** `npm install`.
+
+### Option B: Root Directory Auto-Detection
+Leave **Root Directory** as `./`. The root `vercel.json` will automatically orchestrate:
+- Build Command: `npm --prefix frontend run build`
+- Output Directory: `frontend/dist`
+- Install Command: `npm --prefix frontend install`
+
+### Environment Variables on Vercel:
+Add the following in **Project Settings > Environment Variables**:
+```env
+NEXT_PUBLIC_API_URL=https://lernal-lms-api.onrender.com
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_BUNNY_CDN_HOSTNAME=vz-xxxx.b-cdn.net
+```
+*(Note: `VITE_*` prefixes like `VITE_API_URL` are also supported seamlessly).*
+
+4. Click **Deploy**.
+5. The included `vercel.json` applies enterprise security headers (`nosniff`, `SAMEORIGIN`, `strict-origin-when-cross-origin`), 1-year immutable caching for static bundles, and SPA fallback rewrites for seamless client-side routing.
 
 ---
 
