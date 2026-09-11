@@ -1,0 +1,134 @@
+# ==============================================================================
+# LERNAL LMS - MASTER GITIGNORE
+# Multi-tier LMS: Frontend (Vercel), Backend (Render), Supabase, Bunny Stream
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. DEPENDENCIES & PACKAGE MANAGERS
+# ------------------------------------------------------------------------------
+node_modules/
+*/node_modules/
+.pnp
+.pnp.js
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnpm-store/
+
+# ------------------------------------------------------------------------------
+# 2. BUILD ARTIFACTS, COMPILER OUTPUTS & CACHES
+# ------------------------------------------------------------------------------
+dist/
+*/dist/
+build/
+*/build/
+out/
+*/out/
+.cache/
+*/.cache/
+.parcel-cache/
+.vite/
+*/.vite/
+*.tsbuildinfo
+.eslintcache
+
+# ------------------------------------------------------------------------------
+# 3. ENVIRONMENT VARIABLES, SECRETS & KEYS (NEVER COMMIT)
+# ------------------------------------------------------------------------------
+# Root and nested environment files
+.env
+.env.*
+*.env
+*.env.local
+*.env.development.local
+*.env.test.local
+*.env.production.local
+
+# Explicitly whitelist example templates
+!.env.example
+!*/.env.example
+
+# Secret keys, tokens, certificates
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+id_rsa
+id_rsa.pub
+secrets/
+*/secrets/
+credentials.json
+service-account*.json
+
+# Supabase secret keys & local state
+.supabase/
+*/.supabase/
+supabase/.temp/
+
+# Bunny.net credentials & token auth secrets
+*bunny_key*
+*bunny_secret*
+*.bunnytoken
+
+# Render deployment secrets & cache
+.render/
+render-secrets.json
+
+# ------------------------------------------------------------------------------
+# 4. DEPLOYMENT PLATFORM ARTIFACTS
+# ------------------------------------------------------------------------------
+# Vercel
+.vercel/
+*/.vercel/
+
+# Netlify / Cloudflare / Serverless
+.netlify/
+.serverless/
+
+# ------------------------------------------------------------------------------
+# 5. LOGS, DIAGNOSTICS & DEBUGGING
+# ------------------------------------------------------------------------------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# ------------------------------------------------------------------------------
+# 6. OPERATING SYSTEM & IDE ARTIFACTS
+# ------------------------------------------------------------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# JetBrains / Visual Studio / Eclipse
+.idea/
+*.sublime-project
+*.sublime-workspace
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+
+# Temporary & Swap files
+*.swp
+*.swo
+*~
+*.bak
+*.tmp
