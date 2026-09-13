@@ -22,7 +22,7 @@ export class BunnyStreamService {
 
   constructor() {
     this.libraryId = process.env.BUNNY_LIBRARY_ID || '348921';
-    this.tokenAuthKey = process.env.BUNNY_TOKEN_AUTH_KEY || 'lernal_secure_stream_salt_key_since_2026';
+    this.tokenAuthKey = process.env.BUNNY_TOKEN_AUTH_KEY || process.env.BUNNY_API_KEY || 'lernal_secure_stream_salt_key_since_2026';
     this.cdnHostname = process.env.BUNNY_CDN_HOSTNAME || 'video.lernal.edu';
     this.tokenExpirationHours = parseInt(process.env.BUNNY_TOKEN_EXPIRATION_HOURS || '6', 10);
   }

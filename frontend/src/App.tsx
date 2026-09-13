@@ -4,9 +4,9 @@
 // Optimized with React.lazy code-splitting and Suspense for Vercel Edge performance
 // ============================================================================
 
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/common/Navbar';
 import { Footer } from './components/common/Footer';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
@@ -53,6 +53,20 @@ const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   </div>
 );
 
+// Auth route trigger for direct /login, /signup, and /register URLs
+const AuthModalRouteHandler: React.FC<{ tab: 'login' | 'register' }> = ({ tab }) => {
+  const { openAuthModal } = useAuth();
+  useEffect(() => {
+    openAuthModal(tab);
+  }, [tab, openAuthModal]);
+
+  return (
+    <PublicLayout>
+      <HomePage />
+    </PublicLayout>
+  );
+};
+
 export const App: React.FC = () => {
   return (
     <AuthProvider>
@@ -67,6 +81,18 @@ export const App: React.FC = () => {
                   <HomePage />
                 </PublicLayout>
               }
+            />
+            <Route
+              path="/login"
+              element={<AuthModalRouteHandler tab="login" />}
+            />
+            <Route
+              path="/signup"
+              element={<AuthModalRouteHandler tab="register" />}
+            />
+            <Route
+              path="/register"
+              element={<AuthModalRouteHandler tab="register" />}
             />
             <Route
               path="/courses"

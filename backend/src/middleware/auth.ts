@@ -10,9 +10,18 @@ import { Profile, UserRole } from '../types/database.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'lernal_super_secret_jwt_key_since_2026_kid_safe';
 
-export interface AuthenticatedRequest extends Request {
+export interface AuthenticatedRequest<
+  P = any,
+  ResBody = any,
+  ReqBody = any,
+  ReqQuery = any
+> extends Request<P, ResBody, ReqBody, ReqQuery> {
   user?: Profile;
   supabaseUser?: any;
+  body: ReqBody;
+  params: P;
+  query: ReqQuery;
+  headers: any;
 }
 
 export function generateToken(profile: Profile): string {

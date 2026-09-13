@@ -1,0 +1,43 @@
+# ============================================================================
+# LERNAL LMS - RENDER INFRASTRUCTURE AS CODE BLUEPRINT
+# Tagline: SINCE 2026
+# Documentation: https://render.com/docs/blueprint-spec
+# ============================================================================
+
+version: "1"
+
+services:
+  - type: web
+    name: lernal-lms-backend
+    runtime: node
+    plan: starter
+    rootDir: backend
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: BUNNY_API_KEY
+        sync: false
+      - key: BUNNY_LIBRARY_ID
+        sync: false
+      - key: BUNNY_CDN_HOSTNAME
+        sync: false
+      - key: BUNNY_TOKEN_AUTH_KEY
+        sync: false
+      - key: BUNNY_TOKEN_EXPIRATION_HOURS
+        value: "6"
