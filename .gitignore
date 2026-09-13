@@ -48,6 +48,9 @@ out/
 # Explicitly whitelist example templates
 !.env.example
 !*/.env.example
+!*.example
+!*/*.example
+!**/.env.*.example
 
 # Secret keys, tokens, certificates
 *.pem

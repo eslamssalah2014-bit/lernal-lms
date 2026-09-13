@@ -3,16 +3,16 @@
 // Connects frontend (Vercel) to backend (Render) with token management
 // ============================================================================
 
-// Support NEXT_PUBLIC_API_URL, VITE_API_URL, and BACKEND_URL with intelligent URL normalization
+// Read backend URL from import.meta.env.VITE_API_URL (with fallback to NEXT_PUBLIC_API_URL / BACKEND_URL)
 const getApiBaseUrl = (): string => {
   const raw = (
-    import.meta.env.NEXT_PUBLIC_API_URL ||
     import.meta.env.VITE_API_URL ||
+    import.meta.env.NEXT_PUBLIC_API_URL ||
     import.meta.env.BACKEND_URL ||
     '/api'
   ).trim().replace(/\/+$/, '');
 
-  // If a full remote URL is provided without /api (e.g. https://your-app.onrender.com), append /api
+  // If a full remote URL is provided without /api (e.g. https://lernal-lms-backend.onrender.com), append /api
   if (raw.startsWith('http://') || raw.startsWith('https://')) {
     return raw.endsWith('/api') ? raw : `${raw}/api`;
   }
